@@ -8,7 +8,7 @@ use engine::common::http::HttpRecord;
 use engine::execute::{ClusterExecute, ClusterType};
 use engine::operators::matchers::FaviconMap;
 use engine::request::RequestGenerator;
-use engine::results::{FingerprintResult, NucleiResult};
+use engine::results::{MatchEvent, NucleiResult};
 use engine::slinger::http::StatusCode;
 use engine::slinger::http::header::HeaderValue;
 use engine::slinger::http::uri::{PathAndQuery, Uri};
@@ -131,7 +131,7 @@ pub struct MatchedResult {
         }]"#
     )
   )]
-  fingerprints: Vec<FingerprintResult>,
+  fingerprints: Vec<MatchEvent>,
   // 漏洞信息
   /// Vulnerability detection results from Nuclei scans
   #[cfg_attr(
@@ -157,14 +157,14 @@ impl MatchedResult {
   pub fn status(&self) -> &Option<StatusCode> {
     &self.status
   }
-  pub fn fingerprint(&self) -> &Vec<FingerprintResult> {
+  pub fn fingerprint(&self) -> &Vec<MatchEvent> {
     &self.fingerprints
   }
   pub fn nuclei_result(&self) -> &BTreeMap<String, Vec<Arc<NucleiResult>>> {
     &self.nuclei
   }
 
-  pub fn update_matched(&mut self, result: &FingerprintResult) {
+  pub fn update_matched(&mut self, result: &MatchEvent) {
     let response = result.response().unwrap_or_default();
     let text = response.text().unwrap_or_default();
     let title = extract_title(&text);
@@ -258,7 +258,7 @@ impl ClusterExecuteRunner {
       cache: Cache::builder().max_capacity(100).build(),
     }
   }
-  fn update_result(&mut self, result: FingerprintResult, key: Option<String>) {
+  fn update_result(&mut self, result: MatchEvent, key: Option<String>) {
     let key = if let Some(key) = key {
       key
     } else {
@@ -349,7 +349,7 @@ impl ClusterExecuteRunner {
         // 提取icon
         http_record.find_favicon_tag(&mut response).await;
         let mut flag = false;
-        let mut result = FingerprintResult::new(&response);
+        let mut result = MatchEvent::new(&response);
         cluster
           .operators
           .iter()
@@ -437,7 +437,7 @@ impl ClusterExecuteRunner {
         if response.body().is_none() {
           continue;
         }
-        let mut result = FingerprintResult::new(&response);
+        let mut result = MatchEvent::new(&response);
         cluster
           .operators
           .iter()
@@ -546,7 +546,7 @@ impl ObserverWard {
       }
     }
     if let Some(resp) = http_record.fav_response() {
-      let mut result = FingerprintResult::new(&resp);
+      let mut result = MatchEvent::new(&resp);
       for clusters in self.cluster_type.web_favicon.iter() {
         // 匹配favicon的，要等index的全部跑完
         if http_record.has_favicon() {

@@ -1,7 +1,7 @@
 use crate::info::Info;
 use crate::operators::{OperatorResult, Operators};
 use crate::request::{PortRange, Requests};
-use crate::results::FingerprintResult;
+use crate::results::MatchEvent;
 use crate::template::Template;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -23,7 +23,7 @@ impl ClusteredOperator {
       operators: t.requests.operators(),
     })
   }
-  pub fn matcher(&self, results: &mut FingerprintResult) {
+  pub fn matcher(&self, results: &mut MatchEvent) {
     let response = results.response().unwrap_or_default();
     for operator in self.operators.iter() {
       let mut result = OperatorResult::default();

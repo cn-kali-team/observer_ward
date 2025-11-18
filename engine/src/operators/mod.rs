@@ -117,12 +117,14 @@ impl Operators {
       }
     }
   }
+  /// 匹配接口统一为只接收 &Response，request 可通过 response.extensions().get::<Request>() 访问
   pub fn matcher(&self, response: &Response, result: &mut OperatorResult) -> Result<()> {
     let mut matchers = Vec::new();
     if self.matchers.is_empty() {
       return Ok(());
     }
     for matcher in self.matchers.iter() {
+      // extract matcher word from response parts as before
       let (words, body) = matcher.part.get_matcher_word_from_part(response)?;
       let (is_match, mw) = match &matcher.matcher_type {
         MatcherType::Word(word) => matcher.match_word(word, words),
@@ -146,22 +148,18 @@ impl Operators {
         | MatcherType::Binary(..)
         | MatcherType::XPath(..) => (false, Vec::new()),
       };
-      // 结果反取
+      // normalize negative match
       let is_match = matcher.negative(is_match);
       matchers.push(is_match);
       if !is_match {
-        // 没有匹配到的
         match self.matchers_condition {
-          Condition::Or => {
-            continue;
-          }
+          Condition::Or => continue,
           Condition::And => {
             result.matched = false;
             break;
           }
         }
       } else {
-        // 匹配到的
         if let Some(name) = &matcher.name {
           result.name.insert(name.clone());
         }
@@ -174,7 +172,6 @@ impl Operators {
         }
       }
     }
-    // 全部匹配到
     if matches!(self.matchers_condition, Condition::And) && matchers.iter().all(|x| *x) {
       result.matched = true;
     }

@@ -1,5 +1,5 @@
 use engine::execute::ClusteredOperator;
-use engine::results::FingerprintResult;
+use engine::results::MatchEvent;
 use engine::template::Template;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
@@ -55,7 +55,7 @@ impl ObserverWard {
       .unwrap_or_default()
       .into();
 
-    let mut result = FingerprintResult::new(&response);
+    let mut result = MatchEvent::new(&response);
 
     for operator in self.operators.clone() {
       operator.matcher(&mut result);

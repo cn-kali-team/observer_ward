@@ -1,6 +1,6 @@
 use console::Emoji;
 use engine::execute::ClusterType;
-use engine::results::FingerprintResult;
+use engine::results::MatchEvent;
 use futures::channel::mpsc::UnboundedSender;
 use log::{debug, info};
 use std::sync::Arc;
@@ -102,7 +102,7 @@ impl engine::slinger_mitm::ResponseInterceptor for FingerprintInterceptor {
             // Spawn async task for fingerprinting - don't block proxy speed
             tokio::spawn(async move {
                 // Match against fingerprints
-                let mut result = FingerprintResult::new(&response_clone);
+                let mut result = MatchEvent::new(&response_clone);
 
                 // Find matching clusters based on scheme
                 if target.scheme_str() == Some("https") || target.scheme_str() == Some("http") {
