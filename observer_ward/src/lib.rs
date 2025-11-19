@@ -163,6 +163,10 @@ impl MatchedResult {
   pub fn nuclei_result(&self) -> &BTreeMap<String, Vec<Arc<NucleiResult>>> {
     &self.nuclei
   }
+  // Return the simplified fingerprint name set
+  pub fn names(&self) -> &HashSet<String> {
+    &self.name
+  }
 
   pub fn update_matched(&mut self, result: &MatchEvent) {
     let response = result.response().unwrap_or_default();
@@ -339,12 +343,16 @@ impl ClusterExecuteRunner {
       // 请求全部路径
       for request in generator {
         debug!("{}{:#?}", Emoji("📤", ""), request);
-        let mut response = self
-          .cache
-          .entry(self.get_request_hash(&request))
-          .or_insert(client.execute(request.clone()).await?)
-          .await
-          .into_value();
+        let key = self.get_request_hash(&request);
+        let mut response = if let Some(response) = self.cache.get(&key).await {
+          // cache hit
+          response
+        } else {
+          // cache miss
+          let response = client.execute(request.clone()).await?;
+          self.cache.insert(key, response.clone()).await;
+          response
+        };
         debug!("{}{:#?}", Emoji("📥", ""), response);
         // 提取icon
         http_record.find_favicon_tag(&mut response).await;
@@ -362,6 +370,25 @@ impl ClusterExecuteRunner {
               .operators
               .iter()
               .for_each(|operator| operator.matcher(&mut result));
+          }
+          if !result.matcher_result().is_empty() {
+            let u = result.matched_at().clone();
+            let ub = Uri::builder()
+              .scheme(u.scheme_str().unwrap_or_default())
+              .authority(
+                u.authority()
+                  .map_or(u.host().unwrap_or_default(), |a| a.as_str()),
+              )
+              .path_and_query("/");
+            if let Ok(home) = ub.build() {
+              let home_key = home.to_string();
+              if let Some(existing) = self.matched_result.get(&home_key) {
+                let existing_templates = existing.names();
+                result
+                  .matcher_result_mut()
+                  .retain(|mr| !existing_templates.contains(&mr.template));
+              }
+            }
           }
         }
         if !result.matcher_result().is_empty() {
@@ -611,11 +638,10 @@ impl ObserverWard {
     // 先跑有匹配到端口的，如果有匹配到就不跑其他的冷门指纹
     // TODO： 可以考虑加个多线程
     for clusters in include {
-      if let Ok(flag) = runner.tcp(&self.config, clusters).await {
-        if flag {
+      if let Ok(flag) = runner.tcp(&self.config, clusters).await
+        && flag {
           break;
         }
-      }
     }
     for clusters in exclude {
       runner.tcp(&self.config, clusters).await.unwrap_or_default();
@@ -642,14 +668,13 @@ impl ObserverWard {
       }
       // 只跑服务指纹
       Some("tcp") | Some("tls") => {
-        if let Some(tcp) = &self.cluster_type.tcp_default {
-          if let Err(_err) = runner.tcp(&self.config, tcp).await {
+        if let Some(tcp) = &self.cluster_type.tcp_default
+          && let Err(_err) = runner.tcp(&self.config, tcp).await {
             return ExecuteResult {
               matched: runner.matched_result,
               record: runner.http_record,
             };
           }
-        }
         self.tcp(&mut runner).await;
       }
       // 跳过
@@ -688,11 +713,10 @@ impl ObserverWard {
   async fn handle_tcp_mode(&self, runner: &mut ClusterExecuteRunner, target: &Uri) {
     if let Ok(tcp_target) = set_uri_scheme("tcp", target) {
       runner.target = tcp_target;
-      if let Some(tcp) = &self.cluster_type.tcp_default {
-        if let Err(_err) = runner.tcp(&self.config, tcp).await {
+      if let Some(tcp) = &self.cluster_type.tcp_default
+        && let Err(_err) = runner.tcp(&self.config, tcp).await {
           return;
         }
-      }
       self.tcp(runner).await;
     }
   }
