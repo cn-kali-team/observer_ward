@@ -106,6 +106,12 @@ impl engine::slinger_mitm::ResponseInterceptor for FingerprintInterceptor {
         // Match against fingerprints
         let mut result = MatchEvent::new(&response_clone);
 
+        // Get request for matching
+        let request_for_matching = response_clone
+          .extensions()
+          .get::<engine::slinger::Request>()
+          .cloned();
+
         // Find matching clusters based on scheme
         if target.scheme_str() == Some("https") || target.scheme_str() == Some("http") {
           // Match against web_default clusters
@@ -114,6 +120,13 @@ impl engine::slinger_mitm::ResponseInterceptor for FingerprintInterceptor {
               .operators
               .iter()
               .for_each(|operator| operator.matcher(&mut result));
+            // Also match against request if available
+            if let Some(ref req) = request_for_matching {
+              cluster
+                .operators
+                .iter()
+                .for_each(|operator| operator.matcher_request(req, Some(&response_clone), &mut result));
+            }
           }
 
           // Match favicon-specific clusters (ensure favicon matchers run)
@@ -130,6 +143,13 @@ impl engine::slinger_mitm::ResponseInterceptor for FingerprintInterceptor {
               .operators
               .iter()
               .for_each(|operator| operator.matcher(&mut result));
+            // Also match against request if available
+            if let Some(ref req) = request_for_matching {
+              cluster
+                .operators
+                .iter()
+                .for_each(|operator| operator.matcher_request(req, Some(&response_clone), &mut result));
+            }
           }
         }
 
