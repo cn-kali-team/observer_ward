@@ -288,3 +288,141 @@ impl OperatorResult {
     self.extract_result.clone()
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::operators::matchers::{Matcher, MatcherType, Part, Word};
+  use slinger::{Request, Response};
+
+  #[test]
+  fn test_operator_target_trait_for_request() {
+    // Create a mock request
+    let request = Request::builder()
+      .method("GET")
+      .uri("http://example.com/test")
+      .header("User-Agent", "test-agent")
+      .header("Custom-Header", "custom-value")
+      .body(slinger::Body::from("test body"))
+      .unwrap();
+    let request = Request::from(request);
+
+    // Test get_headers
+    let headers = request.get_headers();
+    assert!(headers.contains("user-agent: test-agent"));
+    assert!(headers.contains("custom-header: custom-value"));
+
+    // Test get_body
+    assert!(request.get_body().is_some());
+
+    // Test get_header
+    assert_eq!(
+      request.get_header("user-agent"),
+      Some("test-agent".to_string())
+    );
+    assert_eq!(
+      request.get_header("custom-header"),
+      Some("custom-value".to_string())
+    );
+  }
+
+  #[test]
+  fn test_operator_target_trait_for_response() {
+    // Create a mock response
+    let response = slinger::http::Response::builder()
+      .status(200)
+      .header("Server", "test-server")
+      .header("Content-Type", "text/html")
+      .body(slinger::Body::from("<html>test</html>"))
+      .unwrap();
+    let response = Response::from(response);
+
+    // Test get_headers
+    let headers = response.get_headers();
+    assert!(headers.contains("server: test-server"));
+    assert!(headers.contains("content-type: text/html"));
+
+    // Test get_body
+    assert!(response.get_body().is_some());
+
+    // Test get_header
+    assert_eq!(response.get_header("server"), Some("test-server".to_string()));
+  }
+
+  #[test]
+  fn test_matcher_generic_with_request() {
+    // Create a request with specific content
+    let request = Request::builder()
+      .method("POST")
+      .uri("http://example.com/api")
+      .header("Authorization", "Bearer token123")
+      .body(slinger::Body::from("username=admin&password=test"))
+      .unwrap();
+    let request = Request::from(request);
+
+    // Create a word matcher for the body
+    let mut matcher = Matcher {
+      matcher_type: MatcherType::Word(Word {
+        words: vec!["username=admin".to_string()],
+      }),
+      name: Some("admin-login".to_string()),
+      part: Part::Body,
+      ..Default::default()
+    };
+    matcher.compile().unwrap();
+
+    // Create operators with the matcher
+    let operators = Operators {
+      matchers: vec![Arc::new(matcher)],
+      ..Default::default()
+    };
+
+    // Match against the request
+    let mut result = OperatorResult::default();
+    operators
+      .matcher_generic(&request, None, &mut result)
+      .unwrap();
+
+    // Verify the match
+    assert!(result.is_matched());
+    assert!(result.name.contains("admin-login"));
+  }
+
+  #[test]
+  fn test_matcher_generic_with_response() {
+    // Create a response with specific content
+    let response = slinger::http::Response::builder()
+      .status(200)
+      .header("Server", "Apache/2.4.41")
+      .body(slinger::Body::from("<html><title>Apache Test</title></html>"))
+      .unwrap();
+    let response = Response::from(response);
+
+    // Create a word matcher for the header
+    let mut matcher = Matcher {
+      matcher_type: MatcherType::Word(Word {
+        words: vec!["Apache".to_string()],
+      }),
+      name: Some("apache-server".to_string()),
+      part: Part::Header,
+      ..Default::default()
+    };
+    matcher.compile().unwrap();
+
+    // Create operators with the matcher
+    let operators = Operators {
+      matchers: vec![Arc::new(matcher)],
+      ..Default::default()
+    };
+
+    // Match against the response
+    let mut result = OperatorResult::default();
+    operators
+      .matcher_generic(&response, Some(&response), &mut result)
+      .unwrap();
+
+    // Verify the match
+    assert!(result.is_matched());
+    assert!(result.name.contains("apache-server"));
+  }
+}
