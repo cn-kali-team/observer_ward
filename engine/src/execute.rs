@@ -3,6 +3,7 @@ use crate::operators::{OperatorResult, Operators};
 use crate::request::{PortRange, Requests};
 use crate::results::MatchEvent;
 use crate::template::Template;
+use slinger::{Request, Response};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -35,6 +36,28 @@ impl ClusteredOperator {
         results.push(&self.template, &self.info, result);
       }
     }
+  }
+  
+  /// Match against a Request with optional Response for extensions
+  pub fn matcher_request(&self, request: &Request, response: Option<&Response>, results: &mut MatchEvent) {
+    for operator in self.operators.iter() {
+      let mut result = OperatorResult::default();
+      if let Err(_err) = operator.matcher_generic(request, response, &mut result) {
+        continue;
+      };
+      operator.extractor_generic(self.info.get_version(), request, &mut result);
+      if result.is_matched() || result.is_extract() {
+        results.push(&self.template, &self.info, result);
+      }
+    }
+  }
+  
+  /// Match against both Request and Response
+  pub fn matcher_both(&self, request: &Request, response: &Response, results: &mut MatchEvent) {
+    // First match against the request
+    self.matcher_request(request, Some(response), results);
+    // Then match against the response (this may find different patterns)
+    self.matcher(results);
   }
 }
 
